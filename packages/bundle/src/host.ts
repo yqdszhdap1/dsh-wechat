@@ -1379,11 +1379,13 @@ class WechatRuntime {
   async #checkKeeper48h(): Promise<void> {
     try {
       const state = await this.#store.read()
+      const settings = resolveSettings(state)
+      if (!settings.keeperEnabled || !settings.keeper48hEnabled) return
       const interactions = state.interactions
       if (!interactions) return
       const now = Date.now()
-      // Send reminder 1 hour before 48h limit (47 hours)
-      const KEEPER_THRESHOLD_MS = 47 * 60 * 60 * 1000
+      const warningHours = settings.keeperWarningHours ?? 47
+      const KEEPER_THRESHOLD_MS = warningHours * 60 * 60 * 1000
 
       for (const [conversationId, info] of Object.entries(interactions)) {
         if (info.warned48h) continue
@@ -1401,7 +1403,7 @@ class WechatRuntime {
             conversationId,
             peerId,
             message,
-            resolveSettings(state),
+            settings,
             contextToken,
           )
 
@@ -3470,14 +3472,19 @@ class WechatRuntime {
     const charge = await this.#quota.charge(conversationId, contextToken)
     if (!charge.warn) return
     try {
-      const sweetNotice = await buildQuotaSweetNotice()
+      const state = await this.#store.read()
+      const settings = resolveSettings(state)
+      const noticeText =
+        settings.keeperEnabled && settings.keeperSweetQuotaEnabled
+          ? await buildQuotaSweetNotice()
+          : QUOTA_WARNING_TEXT
       await this.#send({
         account,
         to: peerId,
-        text: sweetNotice,
+        text: noticeText,
         ...(contextToken === undefined ? {} : { contextToken }),
       })
-      this.#recordBoot(`quota: 窗口已用 ${String(charge.used)}/${String(QUOTA_PER_TOKEN)}，已发送温柔续期提醒（未央·Keeper）`)
+      this.#recordBoot(`quota: 窗口已用 ${String(charge.used)}/${String(QUOTA_PER_TOKEN)}，已发送续期提醒`)
     } catch {
       // A warning nobody receives is not worth a thrown error; the next send queues regardless.
       this.#recordBoot(`quota: 窗口已用 ${String(charge.used)}/${String(QUOTA_PER_TOKEN)}，提醒未能发出`)

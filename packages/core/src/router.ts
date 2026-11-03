@@ -499,6 +499,18 @@ export class SessionRouter {
         return { kind: 'reply', text: HELP_TEXT }
 
       case '/keeper': {
+        const sub = args.trim().toLowerCase()
+        if (sub === 'help') {
+          return {
+            kind: 'reply',
+            text: [
+              '🌸 【未央守护指令说明】',
+              '/keeper           获取今日新知与亲昵情话速递',
+              '/keeper test      立即测试一条最新新知与情话卡片',
+              '提示：未央总开关、48小时提前提醒时间及配额情话落款可在 DSH 设置页（设置 → 微信 → 行为）中可视化配置。',
+            ].join('\n'),
+          }
+        }
         const message = await buildKeepAliveMessage()
         return { kind: 'reply', text: message }
       }
@@ -1172,10 +1184,10 @@ export class SessionRouter {
 }
 
 /** Commands that may be written with or without an argument. */
-const COMMANDS_WITH_ARG = ['/new', '/switch', '/model'] as const
+const COMMANDS_WITH_ARG = ['/new', '/switch', '/model', '/keeper'] as const
 
 /** Commands that never take an argument. */
-const COMMANDS_BARE = ['/help', '/list', '/current', '/cancel', '/keeper'] as const
+const COMMANDS_BARE = ['/help', '/list', '/current', '/cancel'] as const
 
 /**
  * Split `/cmd args` into its parts.

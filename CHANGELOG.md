@@ -10,9 +10,14 @@ All notable changes to `dsh-wechat` will be documented in this file.
   - 自动记录微信用户最后一次上行交互的毫秒时间戳（`state.interactions[conversationId].lastInteractionAt`）。
   - 后台常驻 15 分钟巡检心跳定时器。当会话静默达到第 47 小时（预留 1 小时安全裕度，防 48 小时整微信平台锁死通道）时，自动触发一次温暖的主动推送。
   - 推送文案采用**【💡 拓宽视野·每日冷知识/科普/一言】+【💌 需回复的亲昵情话】**的复合排版结构，给用户最低心理负担的交互理由（例如发表情或敲个 1 即可唤醒连线）。
-- **10 条回复配额最后一条温柔情话 (Sweet Quota Reminder)**
-  - 优化原版生硬的冰冷警告（`📮 微信这边一个回复窗口最多连发 10 条...`）。
-  - 在第 8/9 条配额临界点追加由 Keeper 动态生成的**亲昵情话与温柔落款**，提醒用户回复以恢复连发配额。
+- **设置界面与菜单全面支持 (Settings UI & Command Menu)**
+  - 在 DSH 设置页（**设置 → 微信 → 行为**）中新增「未央」专属配置卡片：
+    - **启用未央守护引擎**（总开关，默认开）
+    - **48 小时会话保温推送**（独立开关，默认开）
+    - **保温提前提醒时间**（数字输入框，默认 47 小时，支持 1~47.9 小时灵活定制）
+    - **10 条回复配额温柔情话**（开关，默认开）
+  - 微信斜杠指令全面收录 `/keeper`（支持 `/keeper`、`/keeper test`、`/keeper help`）。
+  - 设置页「指令」表格同步展示 `/keeper` 指令用途。
 - **多元知识与情话 API 矩阵 (Multi-source Knowledge & Sweet Nothings)**
   - **知识拓宽源**：中文维基百科 REST API（今日人类历史事件与文明突破）、一言 Hitokoto（文学、哲学、诗词）、今日一言。
   - **亲昵情话源**：LoveLive SweetNothings API、Shadiao CHP 彩虹屁 / 蜜语 API。

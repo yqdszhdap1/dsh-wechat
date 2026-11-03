@@ -201,6 +201,15 @@ window.__ModuleLoader__.load({
         quoteHistoryHint: '每个对话保留多少条已发消息，用来还原「引用」的内容。',
         presenceNote: '渠道身份提示',
         presenceNoteHint: '每条消息前都会附上，告诉 agent 你在手机上。不建议清空。',
+        keeperTitle: '「未央」会话守护与温馨陪伴',
+        keeperEnabled: '启用未央守护引擎',
+        keeperEnabledHint: '总开关：统一管理 48 小时会话保温巡检、超时唤醒与配额温柔情话落款。',
+        keeper48hEnabled: '48 小时会话保温推送',
+        keeper48hEnabledHint: '微信会话即将超时休眠前，自动发送每日新知（冷知识/科普）与引导回复的亲昵情话，保持连线不中断。',
+        keeperWarningHours: '保温提前提醒时间（小时）',
+        keeperWarningHoursHint: '距最后一次用户交互满多少小时后发起提醒（微信 48 小时硬锁死，默认 47 小时，建议 45~47）。',
+        keeperSweetQuotaEnabled: '10 条回复配额温柔情话',
+        keeperSweetQuotaEnabledHint: '当单次窗口回复达到配额临界时，自动附带温柔的亲昵情话落款，提醒回复以续期配额。',
         settingsSave: '保存设置',
         settingsSaved: '已保存',
         settingsDirty: '有改动还没保存。',
@@ -319,6 +328,15 @@ window.__ModuleLoader__.load({
         quoteHistoryHint: 'How many sent messages to keep per conversation, so quotes resolve.',
         presenceNote: 'Channel note',
         presenceNoteHint: 'Prepended to every message, telling the agent you are on a phone.',
+        keeperTitle: '「Weiyang」Keeper Session Warming & Sweet Nothings',
+        keeperEnabled: 'Enable Keeper Engine',
+        keeperEnabledHint: 'Master switch for 48h session warming patrol, keep-alive prompts, and affectionate quota reminders.',
+        keeper48hEnabled: '48-Hour Session Keep-Alive Warming',
+        keeper48hEnabledHint: 'Automatically sends daily knowledge and affectionate prompt before the 48h window expires.',
+        keeperWarningHours: 'Warming Advance Hours',
+        keeperWarningHoursHint: 'Hours after last interaction to trigger keep-alive (WeChat closes at 48h; default 47, range 1-47.9).',
+        keeperSweetQuotaEnabled: 'Affectionate 10-Message Quota Notice',
+        keeperSweetQuotaEnabledHint: 'Appends a gentle sweet notice when reply quota is almost exhausted.',
         settingsSave: 'Save',
         settingsSaved: 'Saved',
         settingsDirty: 'Changes are not saved yet.',
@@ -1409,6 +1427,77 @@ a.dsh-wechat-button { text-decoration: none; }
                   rows: 4,
                   value: state.draft.presenceNote ?? '',
                   onChange: (event) => edit('presenceNote', event.target.value),
+                }),
+              ),
+
+              h('h3', null, t.keeperTitle),
+
+              h(
+                'div',
+                { className: 'dsh-wechat-row' },
+                h(
+                  'div',
+                  { className: 'dsh-wechat-row-text' },
+                  h('label', null, t.keeperEnabled),
+                  h('span', { className: 'dsh-wechat-hint' }, t.keeperEnabledHint),
+                ),
+                h(Toggle, {
+                  checked: state.draft.keeperEnabled !== false,
+                  label: t.keeperEnabled,
+                  disabled: state.busy,
+                  onChange: (next) => edit('keeperEnabled', next),
+                }),
+              ),
+
+              h(
+                'div',
+                { className: 'dsh-wechat-row' },
+                h(
+                  'div',
+                  { className: 'dsh-wechat-row-text' },
+                  h('label', null, t.keeper48hEnabled),
+                  h('span', { className: 'dsh-wechat-hint' }, t.keeper48hEnabledHint),
+                ),
+                h(Toggle, {
+                  checked: state.draft.keeper48hEnabled !== false,
+                  label: t.keeper48hEnabled,
+                  disabled: state.busy || state.draft.keeperEnabled === false,
+                  onChange: (next) => edit('keeper48hEnabled', next),
+                }),
+              ),
+
+              field(
+                t.keeperWarningHours,
+                t.keeperWarningHoursHint,
+                h('input', {
+                  type: 'number',
+                  min: 1,
+                  max: 47.9,
+                  step: 0.5,
+                  className: 'dsh-wechat-input',
+                  disabled:
+                    state.busy ||
+                    state.draft.keeperEnabled === false ||
+                    state.draft.keeper48hEnabled === false,
+                  value: state.draft.keeperWarningHours ?? 47,
+                  onChange: (event) => edit('keeperWarningHours', Number(event.target.value)),
+                }),
+              ),
+
+              h(
+                'div',
+                { className: 'dsh-wechat-row' },
+                h(
+                  'div',
+                  { className: 'dsh-wechat-row-text' },
+                  h('label', null, t.keeperSweetQuotaEnabled),
+                  h('span', { className: 'dsh-wechat-hint' }, t.keeperSweetQuotaEnabledHint),
+                ),
+                h(Toggle, {
+                  checked: state.draft.keeperSweetQuotaEnabled !== false,
+                  label: t.keeperSweetQuotaEnabled,
+                  disabled: state.busy || state.draft.keeperEnabled === false,
+                  onChange: (next) => edit('keeperSweetQuotaEnabled', next),
                 }),
               ),
 

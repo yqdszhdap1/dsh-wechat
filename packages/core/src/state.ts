@@ -194,6 +194,14 @@ export interface ChannelSettings {
    * directory, which is why the settings page says a restart is needed.
    */
   workspacePath?: string
+  /** 是否启用「未央」智能守护引擎总开关（统一管理48h保温与温柔落款）。 */
+  keeperEnabled?: boolean
+  /** 是否开启 48 小时微信会话静默保温主动推送。 */
+  keeper48hEnabled?: boolean
+  /** 48 小时保温提前提醒时间（小时，默认 47）。 */
+  keeperWarningHours?: number
+  /** 是否开启 10 条连续回复配额温柔情话落款。 */
+  keeperSweetQuotaEnabled?: boolean
 }
 
 /** Permission presets this channel will apply to its own sessions. */
@@ -210,6 +218,10 @@ export const DEFAULT_SETTINGS = {
   permissionPreset: 'danger-full-access',
   allowCrossSessionNotify: true,
   workspacePath: '',
+  keeperEnabled: true,
+  keeper48hEnabled: true,
+  keeperWarningHours: 47,
+  keeperSweetQuotaEnabled: true,
   presenceNote:
     '[渠道：微信] 你在和微信上的用户对话，对方在手机上，看不到这台电脑的屏幕和文件系统。' +
     '不要让他去"打开某个路径"或"看某个文件"。需要给他看东西时，直接发送：' +
@@ -237,7 +249,11 @@ export function resolveSettings(state: ChannelState): Required<ChannelSettings> 
     allowCrossSessionNotify:
       stored.allowCrossSessionNotify ?? DEFAULT_SETTINGS.allowCrossSessionNotify,
     workspacePath: stored.workspacePath ?? DEFAULT_SETTINGS.workspacePath,
-  presenceNote: stored.presenceNote ?? DEFAULT_SETTINGS.presenceNote,
+    keeperEnabled: stored.keeperEnabled ?? DEFAULT_SETTINGS.keeperEnabled,
+    keeper48hEnabled: stored.keeper48hEnabled ?? DEFAULT_SETTINGS.keeper48hEnabled,
+    keeperWarningHours: stored.keeperWarningHours ?? DEFAULT_SETTINGS.keeperWarningHours,
+    keeperSweetQuotaEnabled: stored.keeperSweetQuotaEnabled ?? DEFAULT_SETTINGS.keeperSweetQuotaEnabled,
+    presenceNote: stored.presenceNote ?? DEFAULT_SETTINGS.presenceNote,
   }
 }
 
@@ -881,6 +897,11 @@ const SETTING_VALIDATORS: {
     raw === 'danger-full-access' || raw === 'auto' || raw === 'default' ? raw : undefined,
   allowCrossSessionNotify: (raw) => (typeof raw === 'boolean' ? raw : undefined),
   workspacePath: (raw) => (typeof raw === 'string' ? raw : undefined),
+  keeperEnabled: (raw) => (typeof raw === 'boolean' ? raw : undefined),
+  keeper48hEnabled: (raw) => (typeof raw === 'boolean' ? raw : undefined),
+  keeperWarningHours: (raw) =>
+    typeof raw === 'number' && Number.isFinite(raw) && raw >= 1 && raw <= 47.9 ? raw : undefined,
+  keeperSweetQuotaEnabled: (raw) => (typeof raw === 'boolean' ? raw : undefined),
 }
 
 /**

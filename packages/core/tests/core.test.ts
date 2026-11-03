@@ -1718,6 +1718,10 @@ test('every setting survives a save and a reload', async () => {
     allowCrossSessionNotify: false,
     workspacePath: 'C:\\chosen-workspace',
     presenceNote: 'round-trip note',
+    keeperEnabled: false,
+    keeper48hEnabled: false,
+    keeperWarningHours: 42,
+    keeperSweetQuotaEnabled: false,
   }
   assert.equal(
     Object.keys(wanted).length,
