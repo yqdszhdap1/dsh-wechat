@@ -623,8 +623,8 @@ class WechatRuntime {
    */
   #settingsCache: Required<ChannelSettings> | undefined
   #needsLogin = false
-  /** 48-hour keep-alive patrol timer (未央 Keeper). */
-  #keeperTimer: NodeJS.Timeout | undefined
+  /** Scheduled exact keep-alive timers per conversation (未央 Keeper 定时到点自动发送). */
+  readonly #keeperTimers = new Map<string, NodeJS.Timeout>()
   /** Resolved Workspace id, cached once the registry answers. */
   #workspaceId: string | undefined
   /**
@@ -1324,12 +1324,12 @@ class WechatRuntime {
     const accounts = Object.values(state.accounts)
     if (accounts.length > 0) this.#needsLogin = false
     for (const account of accounts) await this.#startMonitor(account)
-    this.#startKeeperTimer()
+    this.#startKeeperTimers()
   }
 
   /** Stop monitoring and tell the service we are going away. */
   async stop(): Promise<void> {
-    this.#stopKeeperTimer()
+    this.#stopKeeperTimers()
     for (const { monitor, abort } of this.#monitors.values()) {
       abort.abort()
       void monitor.notifyStop()
@@ -1339,7 +1339,7 @@ class WechatRuntime {
 
   /** Tear everything down for plugin disposal. */
   async halt(): Promise<void> {
-    this.#stopKeeperTimer()
+    this.#stopKeeperTimers()
     for (const entry of this.#replies.values()) clearTimeout(entry.timer)
     this.#replies.clear()
     // Parked attachments hold timers; a reload must not leave one to fire against a
@@ -1351,74 +1351,119 @@ class WechatRuntime {
   }
 
   /**
-   * Start 48-hour keep-alive patrol timer (未央 Keeper).
+   * Schedule exact keep-alive timers for all existing unwarned conversations on startup.
    */
-  #startKeeperTimer(): void {
-    if (this.#keeperTimer !== undefined) return
-    // Check every 15 minutes
-    this.#keeperTimer = setInterval(() => {
-      void this.#checkKeeper48h()
-    }, 15 * 60 * 1000)
-    // Run an asynchronous check 5 seconds after startup
-    setTimeout(() => {
-      void this.#checkKeeper48h()
-    }, 5000)
+  #startKeeperTimers(): void {
+    void (async () => {
+      try {
+        const state = await this.#store.read()
+        const interactions = state.interactions
+        if (!interactions) return
+        for (const [conversationId, info] of Object.entries(interactions)) {
+          if (!info.warned48h) {
+            void this.#scheduleKeeper(conversationId, info.lastInteractionAt)
+          }
+        }
+      } catch (err) {
+        this.#recordBoot(`keeper: startup schedule error: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    })()
   }
 
-  /** Stop 48-hour keep-alive patrol timer. */
-  #stopKeeperTimer(): void {
-    if (this.#keeperTimer !== undefined) {
-      clearInterval(this.#keeperTimer)
-      this.#keeperTimer = undefined
+  /** Cancel all scheduled keep-alive timers. */
+  #stopKeeperTimers(): void {
+    for (const timer of this.#keeperTimers.values()) clearTimeout(timer)
+    this.#keeperTimers.clear()
+  }
+
+  /** Cancel scheduled keep-alive timer for one conversation. */
+  #clearKeeperTimer(conversationId: string): void {
+    const timer = this.#keeperTimers.get(conversationId)
+    if (timer !== undefined) {
+      clearTimeout(timer)
+      this.#keeperTimers.delete(conversationId)
     }
   }
 
   /**
-   * Check all conversation interactions and send 48-hour warming message when approaching limit.
+   * Schedule an exact timer from the last interaction time to target warming time.
+   * Cancels any periodic polling; triggers exactly when the configured hours elapse.
    */
-  async #checkKeeper48h(): Promise<void> {
+  async #scheduleKeeper(conversationId: string, lastInteractionAt: number): Promise<void> {
+    this.#clearKeeperTimer(conversationId)
     try {
       const state = await this.#store.read()
       const settings = resolveSettings(state)
       if (!settings.keeperEnabled || !settings.keeper48hEnabled) return
-      const interactions = state.interactions
-      if (!interactions) return
-      const now = Date.now()
+
       const warningHours = settings.keeperWarningHours ?? 47
-      const KEEPER_THRESHOLD_MS = warningHours * 60 * 60 * 1000
+      const targetTime = lastInteractionAt + warningHours * 3600 * 1000
+      const now = Date.now()
+      const delay = targetTime - now
 
-      for (const [conversationId, info] of Object.entries(interactions)) {
-        if (info.warned48h) continue
-        const elapsed = now - info.lastInteractionAt
-        if (elapsed >= KEEPER_THRESHOLD_MS && elapsed < 48 * 60 * 60 * 1000) {
-          const binding = state.bindings[conversationId]
-          const account = binding?.accountId ? state.accounts[binding.accountId] : Object.values(state.accounts)[0]
-          if (!account) continue
-          const peerId = binding?.peerId ?? (conversationId.includes(':') ? conversationId.split(':')[1] : conversationId)
-          const contextToken = state.contextTokens[account.accountId]?.[conversationId]
-
-          const message = await buildKeepAliveMessage()
-          await this.#sendWithinLimit(
-            account,
-            conversationId,
-            peerId,
-            message,
-            settings,
-            contextToken,
-          )
-
-          await this.#store.update((s) => {
-            const entry = (s.interactions ??= {})[conversationId]
-            if (entry) {
-              entry.warned48h = true
-              entry.warnedAt = Date.now()
-            }
-          })
-          this.#recordBoot(`keeper: 48h keepalive warming message sent to ${conversationId}`)
+      if (delay <= 0) {
+        // Target time has already passed; if still within 48h and not warned, fire immediately
+        if (now - lastInteractionAt < 48 * 3600 * 1000) {
+          await this.#triggerKeeperMessage(conversationId)
         }
+        return
       }
+
+      // Schedule exact timer directly to targetTime
+      const timer = setTimeout(() => {
+        this.#keeperTimers.delete(conversationId)
+        void this.#triggerKeeperMessage(conversationId)
+      }, delay)
+
+      this.#keeperTimers.set(conversationId, timer)
+      this.#recordBoot(
+        `keeper: 定时至设定时间发送 (在 ${(delay / 3600000).toFixed(2)} 小时后触发) conversation=${conversationId}`,
+      )
     } catch (err) {
-      this.#recordBoot(`keeper: 48h check error: ${err instanceof Error ? err.message : String(err)}`)
+      this.#recordBoot(`keeper: schedule error: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  /**
+   * Send the keep-alive message at the scheduled moment.
+   */
+  async #triggerKeeperMessage(conversationId: string): Promise<void> {
+    try {
+      const state = await this.#store.read()
+      const settings = resolveSettings(state)
+      if (!settings.keeperEnabled || !settings.keeper48hEnabled) return
+      const info = state.interactions?.[conversationId]
+      if (!info || info.warned48h) return
+      const now = Date.now()
+      const elapsed = now - info.lastInteractionAt
+      // Ensure it has not exceeded the 48h platform limit
+      if (elapsed >= 48 * 3600 * 1000) {
+        this.#recordBoot(`keeper: 跳过超时发送，已超过微信 48h 限制 (${conversationId})`)
+        return
+      }
+
+      const binding = state.bindings[conversationId]
+      const account =
+        binding?.accountId ? state.accounts[binding.accountId] : Object.values(state.accounts)[0]
+      if (!account) return
+      const peerId =
+        binding?.peerId ??
+        (conversationId.includes(':') ? conversationId.split(':')[1] : conversationId)
+      const contextToken = state.contextTokens[account.accountId]?.[conversationId]
+
+      const message = await buildKeepAliveMessage()
+      await this.#sendWithinLimit(account, conversationId, peerId, message, settings, contextToken)
+
+      await this.#store.update((s) => {
+        const entry = (s.interactions ??= {})[conversationId]
+        if (entry) {
+          entry.warned48h = true
+          entry.warnedAt = Date.now()
+        }
+      })
+      this.#recordBoot(`keeper: 达到设定时间，已自动发送 48h 保温卡片 (${conversationId})`)
+    } catch (err) {
+      this.#recordBoot(`keeper: 触发发送失败: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
@@ -1726,6 +1771,9 @@ class WechatRuntime {
         warned48h: false,
       }
     })
+
+    // Cancel any previous timer and schedule exact timer from this new interaction!
+    void this.#scheduleKeeper(message.conversationId, Date.now())
 
     /*
      * A message from the user is the only thing that reopens the reply window, so anything queued
