@@ -500,6 +500,12 @@ export class SessionRouter {
 
       case '/keeper': {
         const sub = args.trim().toLowerCase()
+        if (sub === 'reset') {
+          return {
+            kind: 'reply',
+            text: '🌸 未央守护计时器已成功重置！将从当前这一刻起重新计算 48 小时保温倒计时。',
+          }
+        }
         if (sub === 'help') {
           return {
             kind: 'reply',
@@ -507,6 +513,7 @@ export class SessionRouter {
               '🌸 【未央守护指令说明】',
               '/keeper           获取今日新知与亲昵情话速递',
               '/keeper test      立即测试一条最新新知与情话卡片',
+              '/keeper reset     重置 48 小时保温倒计时',
               '提示：未央总开关、48小时提前提醒时间及配额情话落款可在 DSH 设置页（设置 → 微信 → 行为）中可视化配置。',
             ].join('\n'),
           }
