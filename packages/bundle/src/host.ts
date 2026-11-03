@@ -45,6 +45,8 @@ import {
   SendRefusedError,
   queuePendingNotification,
   expirePendingNotifications,
+  buildKeepAliveMessage,
+  buildQuotaSweetNotice,
   QUOTA_PER_TOKEN as QUOTA_LIMIT,
   QUOTA_WARNING as QUOTA_WARNING_TEXT,
   type BindingStore,
@@ -621,6 +623,8 @@ class WechatRuntime {
    */
   #settingsCache: Required<ChannelSettings> | undefined
   #needsLogin = false
+  /** 48-hour keep-alive patrol timer (未央 Keeper). */
+  #keeperTimer: NodeJS.Timeout | undefined
   /** Resolved Workspace id, cached once the registry answers. */
   #workspaceId: string | undefined
   /**
@@ -1320,10 +1324,12 @@ class WechatRuntime {
     const accounts = Object.values(state.accounts)
     if (accounts.length > 0) this.#needsLogin = false
     for (const account of accounts) await this.#startMonitor(account)
+    this.#startKeeperTimer()
   }
 
   /** Stop monitoring and tell the service we are going away. */
   async stop(): Promise<void> {
+    this.#stopKeeperTimer()
     for (const { monitor, abort } of this.#monitors.values()) {
       abort.abort()
       void monitor.notifyStop()
@@ -1333,6 +1339,7 @@ class WechatRuntime {
 
   /** Tear everything down for plugin disposal. */
   async halt(): Promise<void> {
+    this.#stopKeeperTimer()
     for (const entry of this.#replies.values()) clearTimeout(entry.timer)
     this.#replies.clear()
     // Parked attachments hold timers; a reload must not leave one to fire against a
@@ -1341,6 +1348,76 @@ class WechatRuntime {
     this.#loginTask?.controller.abort()
     this.#loginTask = undefined
     await this.stop()
+  }
+
+  /**
+   * Start 48-hour keep-alive patrol timer (未央 Keeper).
+   */
+  #startKeeperTimer(): void {
+    if (this.#keeperTimer !== undefined) return
+    // Check every 15 minutes
+    this.#keeperTimer = setInterval(() => {
+      void this.#checkKeeper48h()
+    }, 15 * 60 * 1000)
+    // Run an asynchronous check 5 seconds after startup
+    setTimeout(() => {
+      void this.#checkKeeper48h()
+    }, 5000)
+  }
+
+  /** Stop 48-hour keep-alive patrol timer. */
+  #stopKeeperTimer(): void {
+    if (this.#keeperTimer !== undefined) {
+      clearInterval(this.#keeperTimer)
+      this.#keeperTimer = undefined
+    }
+  }
+
+  /**
+   * Check all conversation interactions and send 48-hour warming message when approaching limit.
+   */
+  async #checkKeeper48h(): Promise<void> {
+    try {
+      const state = await this.#store.read()
+      const interactions = state.interactions
+      if (!interactions) return
+      const now = Date.now()
+      // Send reminder 1 hour before 48h limit (47 hours)
+      const KEEPER_THRESHOLD_MS = 47 * 60 * 60 * 1000
+
+      for (const [conversationId, info] of Object.entries(interactions)) {
+        if (info.warned48h) continue
+        const elapsed = now - info.lastInteractionAt
+        if (elapsed >= KEEPER_THRESHOLD_MS && elapsed < 48 * 60 * 60 * 1000) {
+          const binding = state.bindings[conversationId]
+          const account = binding?.accountId ? state.accounts[binding.accountId] : Object.values(state.accounts)[0]
+          if (!account) continue
+          const peerId = binding?.peerId ?? (conversationId.includes(':') ? conversationId.split(':')[1] : conversationId)
+          const contextToken = state.contextTokens[account.accountId]?.[conversationId]
+
+          const message = await buildKeepAliveMessage()
+          await this.#sendWithinLimit(
+            account,
+            conversationId,
+            peerId,
+            message,
+            resolveSettings(state),
+            contextToken,
+          )
+
+          await this.#store.update((s) => {
+            const entry = (s.interactions ??= {})[conversationId]
+            if (entry) {
+              entry.warned48h = true
+              entry.warnedAt = Date.now()
+            }
+          })
+          this.#recordBoot(`keeper: 48h keepalive warming message sent to ${conversationId}`)
+        }
+      }
+    } catch (err) {
+      this.#recordBoot(`keeper: 48h check error: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   /**
@@ -1635,14 +1712,18 @@ class WechatRuntime {
       `inbound: ${message.conversationId} media=${String(message.media?.length ?? 0)} text=${String(message.text.length)}`,
     )
 
-    // Remember the reply token for this conversation before anything can fail.
-    if (message.contextToken !== undefined) {
-      const token = message.contextToken
-      await this.#store.update((state) => {
+    // Remember the reply token and refresh 48-hour keeper interaction timestamp.
+    await this.#store.update((state) => {
+      if (message.contextToken !== undefined) {
         const perAccount = (state.contextTokens[message.accountId] ??= {})
-        perAccount[message.conversationId] = token
-      })
-    }
+        perAccount[message.conversationId] = message.contextToken
+      }
+      const interactions = (state.interactions ??= {})
+      interactions[message.conversationId] = {
+        lastInteractionAt: Date.now(),
+        warned48h: false,
+      }
+    })
 
     /*
      * A message from the user is the only thing that reopens the reply window, so anything queued
@@ -3389,13 +3470,14 @@ class WechatRuntime {
     const charge = await this.#quota.charge(conversationId, contextToken)
     if (!charge.warn) return
     try {
+      const sweetNotice = await buildQuotaSweetNotice()
       await this.#send({
         account,
         to: peerId,
-        text: QUOTA_WARNING,
+        text: sweetNotice,
         ...(contextToken === undefined ? {} : { contextToken }),
       })
-      this.#recordBoot(`quota: 窗口已用 ${String(charge.used)}/${String(QUOTA_PER_TOKEN)}，已提醒续期`)
+      this.#recordBoot(`quota: 窗口已用 ${String(charge.used)}/${String(QUOTA_PER_TOKEN)}，已发送温柔续期提醒（未央·Keeper）`)
     } catch {
       // A warning nobody receives is not worth a thrown error; the next send queues regardless.
       this.#recordBoot(`quota: 窗口已用 ${String(charge.used)}/${String(QUOTA_PER_TOKEN)}，提醒未能发出`)

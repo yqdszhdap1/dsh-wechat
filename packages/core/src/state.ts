@@ -26,6 +26,16 @@ import type { WeixinAccount } from './types.ts'
 import { normalizeQuota, type QuotaEntry } from './quota.ts'
 import type { BrowsePosition, SessionBinding } from './router.ts'
 
+/** Last interaction and 48-hour keepalive state for one conversation. */
+export interface InteractionState {
+  /** Timestamp in ms when the user last sent an inbound message. */
+  lastInteractionAt: number
+  /** True when the 48-hour keep-alive warning has been sent for this cycle. */
+  warned48h?: boolean
+  /** Timestamp in ms when the 48h warning was sent. */
+  warnedAt?: number
+}
+
 /** Everything persisted for one channel deployment. */
 export interface ChannelState {
   version: 1
@@ -99,6 +109,11 @@ export interface ChannelState {
    * up to one count rather than two.
    */
   quota?: Record<string, QuotaEntry>
+  /**
+   * Last interaction timestamps and 48h keeper flags, per conversation.
+   * Managed by Keeper to track the 48-hour window without guessing.
+   */
+  interactions?: Record<string, InteractionState>
   /** Whether the channel should reconnect on boot. */
   autoStart?: boolean
   /**
@@ -698,9 +713,25 @@ function normalize(parsed: Partial<ChannelState>): ChannelState {
      * restart.
      */
     quota: normalizeQuota(parsed.quota),
+    ...(isRecord(parsed.interactions) ? { interactions: normalizeInteractions(parsed.interactions) } : {}),
     ...(isRecord(parsed.settings) ? { settings: normalizeSettings(parsed.settings) } : {}),
     ...(typeof parsed.autoStart === 'boolean' ? { autoStart: parsed.autoStart } : {}),
   }
+}
+
+/** Keep only well-formed interaction timestamps. */
+function normalizeInteractions(raw: Record<string, unknown>): Record<string, InteractionState> {
+  const result: Record<string, InteractionState> = {}
+  for (const [convId, item] of Object.entries(raw)) {
+    if (isRecord(item) && typeof item.lastInteractionAt === 'number' && Number.isFinite(item.lastInteractionAt)) {
+      result[convId] = {
+        lastInteractionAt: item.lastInteractionAt,
+        ...(typeof item.warned48h === 'boolean' ? { warned48h: item.warned48h } : {}),
+        ...(typeof item.warnedAt === 'number' ? { warnedAt: item.warnedAt } : {}),
+      }
+    }
+  }
+  return result
 }
 
 /**
