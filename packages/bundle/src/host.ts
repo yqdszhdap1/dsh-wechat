@@ -47,6 +47,7 @@ import {
   expirePendingNotifications,
   buildKeepAliveMessage,
   buildQuotaSweetNotice,
+  adjustTargetForDnd,
   QUOTA_PER_TOKEN as QUOTA_LIMIT,
   QUOTA_WARNING as QUOTA_WARNING_TEXT,
   type BindingStore,
@@ -1386,8 +1387,9 @@ class WechatRuntime {
   }
 
   /**
-   * Schedule an exact timer from the last interaction time to target warming time.
-   * Cancels any periodic polling; triggers exactly when the configured hours elapse.
+   * Schedule an exact timer to the configured warming moment before the 48-hour limit.
+   * - keeperAdvanceMinutes: default 60 (fire 60 minutes before 48h limit)
+   * - keeperDnd: HH:mm-HH:mm (if target falls inside DND, automatically advance to before DND starts)
    */
   async #scheduleKeeper(conversationId: string, lastInteractionAt: number): Promise<void> {
     this.#clearKeeperTimer(conversationId)
@@ -1396,8 +1398,14 @@ class WechatRuntime {
       const settings = resolveSettings(state)
       if (!settings.keeperEnabled || !settings.keeper48hEnabled) return
 
-      const warningHours = settings.keeperWarningHours ?? 47
-      const targetTime = lastInteractionAt + warningHours * 3600 * 1000
+      // 48 hours limit timestamp
+      const limitAt = lastInteractionAt + 48 * 3600 * 1000
+      // Advance minutes before 48h limit (default: 60 minutes)
+      const advanceMs = (settings.keeperAdvanceMinutes ?? 60) * 60 * 1000
+      const rawTarget = limitAt - advanceMs
+
+      // Check DND and adjust earlier if within DND window
+      const targetTime = adjustTargetForDnd(rawTarget, settings.keeperDnd)
       const now = Date.now()
       const delay = targetTime - now
 
@@ -1416,8 +1424,9 @@ class WechatRuntime {
       }, delay)
 
       this.#keeperTimers.set(conversationId, timer)
+      const dndNote = targetTime < rawTarget ? ` (因处于勿扰区间 ${settings.keeperDnd}，已自动提前)` : ''
       this.#recordBoot(
-        `keeper: 定时至设定时间发送 (在 ${(delay / 3600000).toFixed(2)} 小时后触发) conversation=${conversationId}`,
+        `keeper: 定时至 ${new Date(targetTime).toISOString()} 发送 (约 ${(delay / 3600000).toFixed(2)} 小时后)${dndNote} conversation=${conversationId}`,
       )
     } catch (err) {
       this.#recordBoot(`keeper: schedule error: ${err instanceof Error ? err.message : String(err)}`)

@@ -198,8 +198,10 @@ export interface ChannelSettings {
   keeperEnabled?: boolean
   /** 是否开启 48 小时微信会话静默保温主动推送。 */
   keeper48hEnabled?: boolean
-  /** 48 小时保温提前提醒时间（小时，默认 47）。 */
-  keeperWarningHours?: number
+  /** 到达 48 小时之前提前提醒时间（分钟，默认 60 分钟，即提前 1 小时）。 */
+  keeperAdvanceMinutes?: number
+  /** 勿扰时间段（HH:mm-HH:mm，如 "23:00-08:00"，处于该时间段则自动提前到勿扰起始时间发送）。留空关闭。 */
+  keeperDnd?: string
   /** 是否开启 10 条连续回复配额温柔情话落款。 */
   keeperSweetQuotaEnabled?: boolean
 }
@@ -220,7 +222,8 @@ export const DEFAULT_SETTINGS = {
   workspacePath: '',
   keeperEnabled: true,
   keeper48hEnabled: true,
-  keeperWarningHours: 47,
+  keeperAdvanceMinutes: 60,
+  keeperDnd: '',
   keeperSweetQuotaEnabled: true,
   presenceNote:
     '[渠道：微信] 你在和微信上的用户对话，对方在手机上，看不到这台电脑的屏幕和文件系统。' +
@@ -251,7 +254,8 @@ export function resolveSettings(state: ChannelState): Required<ChannelSettings> 
     workspacePath: stored.workspacePath ?? DEFAULT_SETTINGS.workspacePath,
     keeperEnabled: stored.keeperEnabled ?? DEFAULT_SETTINGS.keeperEnabled,
     keeper48hEnabled: stored.keeper48hEnabled ?? DEFAULT_SETTINGS.keeper48hEnabled,
-    keeperWarningHours: stored.keeperWarningHours ?? DEFAULT_SETTINGS.keeperWarningHours,
+    keeperAdvanceMinutes: stored.keeperAdvanceMinutes ?? DEFAULT_SETTINGS.keeperAdvanceMinutes,
+    keeperDnd: stored.keeperDnd ?? DEFAULT_SETTINGS.keeperDnd,
     keeperSweetQuotaEnabled: stored.keeperSweetQuotaEnabled ?? DEFAULT_SETTINGS.keeperSweetQuotaEnabled,
     presenceNote: stored.presenceNote ?? DEFAULT_SETTINGS.presenceNote,
   }
@@ -899,8 +903,9 @@ const SETTING_VALIDATORS: {
   workspacePath: (raw) => (typeof raw === 'string' ? raw : undefined),
   keeperEnabled: (raw) => (typeof raw === 'boolean' ? raw : undefined),
   keeper48hEnabled: (raw) => (typeof raw === 'boolean' ? raw : undefined),
-  keeperWarningHours: (raw) =>
-    typeof raw === 'number' && Number.isFinite(raw) && raw >= 1 && raw <= 47.9 ? raw : undefined,
+  keeperAdvanceMinutes: (raw) =>
+    typeof raw === 'number' && Number.isFinite(raw) && raw >= 1 && raw <= 1440 ? raw : undefined,
+  keeperDnd: (raw) => (typeof raw === 'string' ? raw : undefined),
   keeperSweetQuotaEnabled: (raw) => (typeof raw === 'boolean' ? raw : undefined),
 }
 

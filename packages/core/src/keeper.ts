@@ -173,3 +173,62 @@ export async function buildQuotaSweetNotice(): Promise<string> {
     `*（悄悄提示：微信给我的连发额度刚好用到最后一条啦，我先在这里安静待命。等你闲下来随手回我一句，通道就会立刻重新接通~ 💕）*`
   )
 }
+
+/**
+ * 解析 HH:mm-HH:mm 勿扰时间段
+ */
+export function parseDndRange(dndStr?: string): { startMinutes: number; endMinutes: number } | undefined {
+  if (!dndStr) return undefined
+  const match = /^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/.exec(dndStr.trim())
+  if (!match) return undefined
+  const sH = Number(match[1])
+  const sM = Number(match[2])
+  const eH = Number(match[3])
+  const eM = Number(match[4])
+  if (sH < 0 || sH > 23 || sM < 0 || sM > 59 || eH < 0 || eH > 23 || eM < 0 || eM > 59) return undefined
+  return {
+    startMinutes: sH * 60 + sM,
+    endMinutes: eH * 60 + eM,
+  }
+}
+
+/**
+ * 如果目标提醒时间处于勿扰时间段内，自动提前到勿扰起始时间发送
+ *
+ * @param targetMs - 预定提醒时刻（毫秒时间戳）
+ * @param dndStr - 勿扰时间段字符串（如 "23:00-08:00"）
+ * @returns 调整后的时刻（若不在勿扰期则原样返回；若在勿扰期则提前到勿扰起点）
+ */
+export function adjustTargetForDnd(targetMs: number, dndStr?: string): number {
+  const dnd = parseDndRange(dndStr)
+  if (!dnd) return targetMs
+
+  const date = new Date(targetMs)
+  const currentMinutes = date.getHours() * 60 + date.getMinutes()
+  const { startMinutes, endMinutes } = dnd
+
+  const sH = Math.floor(startMinutes / 60)
+  const sM = startMinutes % 60
+
+  if (startMinutes < endMinutes) {
+    // 同一天内（例如 01:00 - 06:00）
+    if (currentMinutes >= startMinutes && currentMinutes < endMinutes) {
+      date.setHours(sH, sM, 0, 0)
+      return date.getTime()
+    }
+  } else if (startMinutes > endMinutes) {
+    // 跨午夜（例如 23:00 - 08:00）
+    if (currentMinutes >= startMinutes) {
+      // 处于深夜部分（例如 23:30），提前到当天的 23:00
+      date.setHours(sH, sM, 0, 0)
+      return date.getTime()
+    } else if (currentMinutes < endMinutes) {
+      // 处于次日凌晨/清晨部分（例如 03:30），该勿扰段起始于前一天的 23:00，提前至前一天的 23:00
+      date.setDate(date.getDate() - 1)
+      date.setHours(sH, sM, 0, 0)
+      return date.getTime()
+    }
+  }
+
+  return targetMs
+}

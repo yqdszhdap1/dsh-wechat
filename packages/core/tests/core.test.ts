@@ -1720,7 +1720,8 @@ test('every setting survives a save and a reload', async () => {
     presenceNote: 'round-trip note',
     keeperEnabled: false,
     keeper48hEnabled: false,
-    keeperWarningHours: 42,
+    keeperAdvanceMinutes: 90,
+    keeperDnd: '23:00-08:00',
     keeperSweetQuotaEnabled: false,
   }
   assert.equal(

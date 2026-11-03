@@ -206,8 +206,11 @@ window.__ModuleLoader__.load({
         keeperEnabledHint: '总开关：统一管理 48 小时会话保温巡检、超时唤醒与配额温柔情话落款。',
         keeper48hEnabled: '48 小时会话保温推送',
         keeper48hEnabledHint: '微信会话即将超时休眠前，自动发送每日新知（冷知识/科普）与引导回复的亲昵情话，保持连线不中断。',
-        keeperWarningHours: '保温提前提醒时间（小时）',
-        keeperWarningHoursHint: '距最后一次用户交互满多少小时后发起提醒（微信 48 小时硬锁死，默认 47 小时，建议 45~47）。',
+        keeperAdvanceMinutes: '提前提醒时间（分钟）',
+        keeperAdvanceMinutesHint: '到达 48 小时限制前多少分钟发送提醒（默认 60 分钟，即提前 1 小时）。',
+        keeperDnd: '勿扰时间段（HH:mm-HH:mm）',
+        keeperDndHint: '例如「23:00-08:00」。若预定提醒时间处于该时间段，将自动提前至勿扰起始时间发送，避免深夜打扰。留空关闭。',
+        keeperDndPlaceholder: '留空关闭，如 23:00-08:00',
         keeperSweetQuotaEnabled: '10 条回复配额温柔情话',
         keeperSweetQuotaEnabledHint: '当单次窗口回复达到配额临界时，自动附带温柔的亲昵情话落款，提醒回复以续期配额。',
         settingsSave: '保存设置',
@@ -333,8 +336,11 @@ window.__ModuleLoader__.load({
         keeperEnabledHint: 'Master switch for 48h session warming patrol, keep-alive prompts, and affectionate quota reminders.',
         keeper48hEnabled: '48-Hour Session Keep-Alive Warming',
         keeper48hEnabledHint: 'Automatically sends daily knowledge and affectionate prompt before the 48h window expires.',
-        keeperWarningHours: 'Warming Advance Hours',
-        keeperWarningHoursHint: 'Hours after last interaction to trigger keep-alive (WeChat closes at 48h; default 47, range 1-47.9).',
+        keeperAdvanceMinutes: 'Advance Warning Time (minutes)',
+        keeperAdvanceMinutesHint: 'Minutes before the 48-hour limit to send warming prompt (default: 60 minutes).',
+        keeperDnd: 'Do Not Disturb (HH:mm-HH:mm)',
+        keeperDndHint: 'e.g. «23:00-08:00». If scheduled reminder falls inside this window, it advances to before DND starts. Leave empty to disable.',
+        keeperDndPlaceholder: 'Leave empty or 23:00-08:00',
         keeperSweetQuotaEnabled: 'Affectionate 10-Message Quota Notice',
         keeperSweetQuotaEnabledHint: 'Appends a gentle sweet notice when reply quota is almost exhausted.',
         settingsSave: 'Save',
@@ -1467,20 +1473,36 @@ a.dsh-wechat-button { text-decoration: none; }
               ),
 
               field(
-                t.keeperWarningHours,
-                t.keeperWarningHoursHint,
+                t.keeperAdvanceMinutes,
+                t.keeperAdvanceMinutesHint,
                 h('input', {
                   type: 'number',
-                  min: 1,
-                  max: 47.9,
-                  step: 0.5,
+                  min: 5,
+                  max: 1440,
+                  step: 5,
                   className: 'dsh-wechat-input',
                   disabled:
                     state.busy ||
                     state.draft.keeperEnabled === false ||
                     state.draft.keeper48hEnabled === false,
-                  value: state.draft.keeperWarningHours ?? 47,
-                  onChange: (event) => edit('keeperWarningHours', Number(event.target.value)),
+                  value: state.draft.keeperAdvanceMinutes ?? 60,
+                  onChange: (event) => edit('keeperAdvanceMinutes', Number(event.target.value)),
+                }),
+              ),
+
+              field(
+                t.keeperDnd,
+                t.keeperDndHint,
+                h('input', {
+                  type: 'text',
+                  className: 'dsh-wechat-input',
+                  placeholder: t.keeperDndPlaceholder,
+                  disabled:
+                    state.busy ||
+                    state.draft.keeperEnabled === false ||
+                    state.draft.keeper48hEnabled === false,
+                  value: state.draft.keeperDnd ?? '',
+                  onChange: (event) => edit('keeperDnd', event.target.value),
                 }),
               ),
 
