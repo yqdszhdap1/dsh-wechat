@@ -19,6 +19,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { compareSessionsNewestFirst, isSameWorkspace } from './session-index.ts'
+import { buildKeepAliveMessage } from './keeper.ts'
 
 /** One conversation's binding to a DSH session. */
 export interface SessionBinding {
@@ -496,6 +497,11 @@ export class SessionRouter {
     switch (command) {
       case '/help':
         return { kind: 'reply', text: HELP_TEXT }
+
+      case '/keeper': {
+        const message = await buildKeepAliveMessage()
+        return { kind: 'reply', text: message }
+      }
 
       case '/new': {
         const binding = await this.#bind(params, args || undefined)
@@ -1169,7 +1175,7 @@ export class SessionRouter {
 const COMMANDS_WITH_ARG = ['/new', '/switch', '/model'] as const
 
 /** Commands that never take an argument. */
-const COMMANDS_BARE = ['/help', '/list', '/current', '/cancel'] as const
+const COMMANDS_BARE = ['/help', '/list', '/current', '/cancel', '/keeper'] as const
 
 /**
  * Split `/cmd args` into its parts.
@@ -2269,6 +2275,7 @@ export const HELP_TEXT = [
   '/model 等级 <等级>  切换当前模型的推理等级',
   '/current         显示当前对话',
   '/cancel          中断当前任务',
+  '/keeper          未央守护：今日新知与亲昵情话速递',
   '/help            显示本帮助',
   '',
   `每屏最多 ${String(BROWSE_PAGE_SIZE)} 条，编号跨屏连续；回复「${SHOW_REST}」看下十个。`,

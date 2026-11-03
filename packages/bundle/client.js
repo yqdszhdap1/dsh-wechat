@@ -165,6 +165,7 @@ window.__ModuleLoader__.load({
         commandModel: '看有哪些模型和推理等级；带编号或名字则切换，加「等级 X」可同时指定等级',
         commandCurrent: '显示当前对话',
         commandCancel: '中断当前任务',
+        commandKeeper: '未央守护：查看48小时保温倒计时、配额状态并获取今日新知与情话速递',
         commandsSeparator: '分隔符可用「：」或直接省略，例如 /switch1。',
         commandsPlain: '说大白话也可以',
         commandsPlainHint:
@@ -277,6 +278,7 @@ window.__ModuleLoader__.load({
         commandModel: 'List the models and their reasoning levels; with a number or name, switch to it — add «等级 X» to set the level at the same time',
         commandCurrent: 'Show the conversation in use',
         commandCancel: 'Interrupt the running task',
+        commandKeeper: 'Keeper status: check 48h keep-alive window, quota status, and get daily wisdom and sweet quote',
         commandsSeparator: 'The separator may be «：» or omitted entirely, as in /switch1.',
         commandsPlain: 'Plain words work too',
         commandsPlainHint:
@@ -1491,6 +1493,7 @@ a.dsh-wechat-button { text-decoration: none; }
               h('div', { className: 'dsh-wechat-command' }, h('dt', null, '/model [编号或名字]'), h('dd', null, t.commandModel)),
               h('div', { className: 'dsh-wechat-command' }, h('dt', null, '/current'), h('dd', null, t.commandCurrent)),
               h('div', { className: 'dsh-wechat-command' }, h('dt', null, '/cancel'), h('dd', null, t.commandCancel)),
+              h('div', { className: 'dsh-wechat-command' }, h('dt', null, '/keeper'), h('dd', null, t.commandKeeper)),
             ),
             h('span', { className: 'dsh-wechat-hint' }, t.commandsSeparator),
             h('h3', null, t.commandsPlain),
